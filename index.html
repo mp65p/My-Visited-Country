@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>旅遊紀錄系統｜已造訪國家</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f4f6f8; color: #222; padding-bottom: 40px;
+  }
+  header {
+    background: #2c5f6f; color: #fff; padding: 16px 20px; position: sticky; top: 0; z-index: 50;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 17px; margin: 0; }
+  header .status { font-size: 11px; opacity: 0.8; }
+  .container { max-width: 640px; margin: 0 auto; padding: 16px; }
+
+  /* 登入畫面 */
+  #loginScreen {
+    max-width: 360px; margin: 80px auto; background: #fff; border-radius: 14px;
+    padding: 28px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); text-align: center;
+  }
+  #loginScreen h2 { margin-top: 0; font-size: 18px; }
+  #loginScreen input {
+    width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px;
+    margin: 12px 0; text-align: center; letter-spacing: 2px;
+  }
+  #loginScreen button, .btn-primary {
+    width: 100%; padding: 12px; background: #2c5f6f; color: #fff; border: none;
+    border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #loginScreen button:active, .btn-primary:active { background: #224a57; }
+  #loginMsg { font-size: 13px; color: #c0392b; min-height: 18px; margin-top: 8px; }
+
+  #appScreen { display: none; }
+
+  .card {
+    background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .form-row { margin-bottom: 10px; }
+  .form-row label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+  .form-row input, .form-row textarea, .form-row select {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px;
+    font-family: inherit; background: #fff;
+  }
+  .form-row textarea { resize: vertical; min-height: 50px; }
+  .form-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .form-actions button { flex: 1; padding: 11px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-save { background: #2c5f6f; color: #fff; }
+  .btn-cancel { background: #eee; color: #555; }
+
+  .map-wrap { text-align: center; margin-bottom: 14px; padding: 0 !important; overflow: hidden; }
+  #worldMapContainer { width: 100%; height: 280px; border-radius: 12px; }
+
+  .list-toolbar {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+  }
+  .list-toolbar h3 { margin: 0; font-size: 15px; }
+  .count-badge { background: #2c5f6f; color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+
+  .country-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .country-item .info { flex: 1; min-width: 0; }
+  .country-item .name { font-size: 15px; font-weight: 600; }
+  .country-item .meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .country-item .note { font-size: 12px; color: #555; margin-top: 3px; word-break: break-word; }
+  .country-item .actions { display: flex; gap: 6px; margin-left: 8px; }
+  .icon-btn {
+    border: none; background: #f0f2f3; width: 32px; height: 32px; border-radius: 8px;
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn.del { background: #fbeaea; }
+
+  .empty-state { text-align: center; color: #999; padding: 30px 0; font-size: 14px; }
+
+  .fab {
+    position: fixed; right: 20px; bottom: 24px; width: 54px; height: 54px; border-radius: 50%;
+    background: #2c5f6f; color: #fff; border: none; font-size: 26px; box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    cursor: pointer; z-index: 500;
+  }
+
+  .backup-row { display: flex; gap: 8px; }
+  .backup-row button { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font-size: 13px; cursor: pointer; }
+  #importFileInput { display: none; }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 2000;
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #fff; width: 100%; max-width: 640px; border-radius: 16px 16px 0 0;
+    padding: 20px; max-height: 85vh; overflow-y: auto;
+  }
+  .modal-box h3 { margin-top: 0; }
+  .toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 2100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ===== 登入畫面 ===== -->
+<div id="loginScreen">
+  <h2>🌍 旅遊紀錄系統</h2>
+  <p style="font-size:13px;color:#888;">請輸入授權碼登入</p>
+  <input id="authCodeInput" type="text" inputmode="numeric" placeholder="授權碼" maxlength="10">
+  <button onclick="handleLogin()">登入</button>
+  <div id="loginMsg"></div>
+</div>
+
+<!-- ===== 主畫面 ===== -->
+<div id="appScreen">
+  <header>
+    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v1</span></h1>
+    <div class="status" id="syncStatus">同步中...</div>
+  </header>
+
+  <div class="container">
+
+    <div class="map-wrap card">
+      <div id="worldMapContainer"><!-- SVG 地圖將注入於此 --></div>
+    </div>
+
+    <div class="card" id="statsCard" style="display:flex;justify-content:space-around;text-align:center;padding:14px;">
+      <div><div style="font-size:20px;font-weight:700;color:#2c5f6f;" id="statCountries">0</div><div style="font-size:11px;color:#888;">已造訪國家</div></div>
+      <div><div style="font-size:20px;font-weight:700;color:#2c5f6f;" id="statContinents">0/6</div><div style="font-size:11px;color:#888;">涵蓋洲別</div></div>
+      <div><div style="font-size:20px;font-weight:700;color:#2c5f6f;" id="statCities">0</div><div style="font-size:11px;color:#888;">已記錄城市</div></div>
+    </div>
+
+    <div class="card" style="padding:10px 14px;display:flex;gap:6px;overflow-x:auto;" id="continentFilter"></div>
+
+    <div class="list-toolbar">
+      <h3>國家清單</h3>
+      <span class="count-badge" id="countBadge">0 國</span>
+    </div>
+
+    <div id="countryList"></div>
+
+    <div class="card">
+      <div class="backup-row">
+        <button onclick="exportData()">📤 匯出 JSON</button>
+        <button onclick="document.getElementById('importFileInput').click()">📥 匯入 JSON</button>
+      </div>
+      <input type="file" id="importFileInput" accept="application/json" onchange="importData(event)">
+    </div>
+
+  </div>
+
+  <button class="fab" onclick="openForm()">＋</button>
+</div>
+
+<!-- ===== 新增/編輯 表單 Modal ===== -->
+<div class="modal-overlay" id="formModal">
+  <div class="modal-box">
+    <h3 id="formTitle">新增國家紀錄</h3>
+    <div class="form-row">
+      <label>選擇國家</label>
+      <input id="f_countrySearch" list="countryDatalist" placeholder="輸入國家或城市，例如：開普敦" oninput="onCountrySearchInput()" autocomplete="off">
+      <datalist id="countryDatalist"></datalist>
+    </div>
+    <input type="hidden" id="f_countryCode">
+    <input type="hidden" id="f_countryName">
+    <input type="hidden" id="f_cityName">
+    <input type="hidden" id="f_cityLat">
+    <input type="hidden" id="f_cityLon">
+    <div class="form-row">
+      <label>造訪者　<a href="javascript:void(0)" onclick="openVisitorManager()" style="font-size:12px;color:#2c5f6f;">管理共用者名單</a></label>
+      <select id="f_visitor"></select>
+    </div>
+    <div class="form-row">
+      <label>旅行類型</label>
+      <select id="f_visitType">
+        <option value="">未分類</option>
+        <option value="個人旅行">個人旅行</option>
+        <option value="出差">出差</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>造訪年份（選填）</label>
+      <input id="f_visitYear" type="number" placeholder="例如 2026">
+    </div>
+    <div class="form-row">
+      <label>備註（選填）</label>
+      <textarea id="f_visitNote" placeholder="旅遊心得、地點等"></textarea>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeForm()">取消</button>
+      <button class="btn-save" onclick="saveCountry()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 共用者名單管理 Modal ===== -->
+<div class="modal-overlay" id="visitorModal">
+  <div class="modal-box">
+    <h3>管理共用者名單</h3>
+    <div id="visitorManageList" style="margin-bottom:14px;"></div>
+    <div class="form-row" style="display:flex;gap:8px;align-items:center;">
+      <input id="newVisitorName" placeholder="新增姓名" style="flex:1;">
+      <input id="newVisitorColor" type="color" value="#e8483b" style="width:44px;height:42px;padding:2px;border-radius:8px;">
+      <button class="icon-btn" onclick="addVisitor()" style="width:42px;height:42px;font-size:18px;">＋</button>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeVisitorManager()">關閉</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   RED-04 / RED-05：Firebase 設定（請填入您的專案資訊）
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBGfQ1oKOrt723tJ3w7LIwDLSh0nGwRF30",
+  authDomain: "my-project-c89db.firebaseapp.com",
+  databaseURL: "https://my-project-c89db-default-rtdb.firebaseio.com",
+  projectId: "my-project-c89db",
+  storageBucket: "my-project-c89db.firebasestorage.app",
+  messagingSenderId: "301172719437",
+  appId: "1:301172719437:web:bd002a934dd846f7c38104"
+};
+
+const APP_KEY_NAME = "travel_visited_countries";   // 主資料節點
+const AUTH_KEY_NAME = "travel_visited_countries_auth"; // 授權節點
+const VISITORS_KEY_NAME = "travel_visited_countries_visitors"; // 共用者名單節點
+
+let _firebaseReady = false;
+let db = null;
+let currentAuthCode = null;
+let currentSpaceKey = null;
+let countriesData = {}; // { id: {countryCode, countryName, visitYear, visitNote, createdAt, updatedAt} }
+let visitorsData = {}; // { id: {name, color} }
+let editingId = null;
+let activeContinent = null; // null = 全部
+const DEFAULT_AUTH_CODE = "0430";
+
+/* 全球國家清單（靜態內建，[國碼,中文名,經度,緯度]，非外部API） */
+const COUNTRY_DB = [
+["TW","台灣",121,23.7],["JP","日本",138,36],["KR","韓國",128,36],["KP","北韓",127,40],
+["CN","中國",104,35],["HK","香港",114,22],["MO","澳門",113,22],["MN","蒙古",103,46],
+["TH","泰國",101,15],["VN","越南",108,16],["LA","寮國",103,18],["KH","柬埔寨",105,13],
+["MM","緬甸",96,21],["SG","新加坡",104,1.3],["MY","馬來西亞",112,2.5],["PH","菲律賓",122,13],
+["ID","印尼",113,-2],["BN","汶萊",114.7,4.5],["TL","東帝汶",125.5,-8.8],
+["IN","印度",79,21],["PK","巴基斯坦",69,30],["BD","孟加拉",90,24],["LK","斯里蘭卡",81,7],
+["NP","尼泊爾",84,28],["BT","不丹",90,27.5],["MV","馬爾地夫",73,3.2],
+["KZ","哈薩克",67,48],["UZ","烏茲別克",64,41],["TM","土庫曼",59,39],["TJ","塔吉克",71,39],
+["KG","吉爾吉斯",75,41],["AF","阿富汗",65,33],
+["IR","伊朗",53,32],["IQ","伊拉克",44,33],["SA","沙烏地阿拉伯",45,24],["AE","阿拉伯聯合大公國",54,24],
+["QA","卡達",51,25.3],["KW","科威特",47.5,29.3],["BH","巴林",50.5,26],["OM","阿曼",56,21],
+["YE","葉門",48,15.5],["JO","約旦",36,31],["IL","以色列",35,31],["PS","巴勒斯坦",35.3,31.9],
+["LB","黎巴嫩",35.9,33.9],["SY","敘利亞",38,35],["TR","土耳其",35,39],["CY","賽普勒斯",33,35],
+["GE","喬治亞",43.4,42],["AM","亞美尼亞",45,40],["AZ","亞塞拜然",47.5,40.3],
+["RU","俄羅斯",90,61],
+["GB","英國",-2,54],["IE","愛爾蘭",-8,53],["FR","法國",2,47],["DE","德國",10,51],
+["NL","荷蘭",5.5,52.2],["BE","比利時",4.5,50.5],["LU","盧森堡",6.1,49.8],
+["CH","瑞士",8.2,46.8],["AT","奧地利",14.5,47.5],["IT","義大利",12,43],
+["ES","西班牙",-4,40],["PT","葡萄牙",-8,39.5],["AD","安道爾",1.5,42.5],["MC","摩納哥",7.4,43.7],
+["SM","聖馬利諾",12.4,43.9],["VA","梵蒂岡",12.45,41.9],["MT","馬爾他",14.4,35.9],
+["GR","希臘",22,39],["AL","阿爾巴尼亞",20,41],["MK","北馬其頓",21.7,41.6],
+["BG","保加利亞",25,43],["RO","羅馬尼亞",25,46],["RS","塞爾維亞",21,44],
+["HR","克羅埃西亞",16,45],["SI","斯洛維尼亞",14.8,46.1],["BA","波士尼亞",17.7,44],
+["ME","蒙特內哥羅",19.3,42.7],["XK","科索沃",20.9,42.6],
+["PL","波蘭",19,52],["CZ","捷克",15.5,49.8],["SK","斯洛伐克",19.5,48.7],
+["HU","匈牙利",19.5,47.2],["UA","烏克蘭",31.5,49],["BY","白俄羅斯",28,53.5],
+["MD","摩爾多瓦",28.5,47],["LT","立陶宛",24,55.3],["LV","拉脫維亞",24.6,56.9],
+["EE","愛沙尼亞",25.5,58.6],
+["SE","瑞典",16,62],["NO","挪威",10,61],["FI","芬蘭",26,64],["DK","丹麥",10,56],
+["IS","冰島",-18,65],
+["US","美國",-98,39],["CA","加拿大",-106,56],["MX","墨西哥",-102,23],
+["GT","瓜地馬拉",-90,15.5],["BZ","貝里斯",-88.7,17.2],["HN","宏都拉斯",-86.5,15],
+["SV","薩爾瓦多",-88.9,13.8],["NI","尼加拉瓜",-85,13],["CR","哥斯大黎加",-84,10],
+["PA","巴拿馬",-80,9],["CU","古巴",-79,21.5],["JM","牙買加",-77.3,18.1],
+["HT","海地",-72.3,19],["DO","多明尼加",-70.5,18.7],["BS","巴哈馬",-77,24],
+["TT","千里達及托巴哥",-61.3,10.7],["BB","巴貝多",-59.5,13.2],
+["BR","巴西",-52,-10],["AR","阿根廷",-64,-34],["CL","智利",-71,-30],
+["PE","秘魯",-76,-10],["CO","哥倫比亞",-74,4],["VE","委內瑞拉",-66,8],
+["EC","厄瓜多",-78.5,-1.8],["BO","玻利維亞",-65,-17],["PY","巴拉圭",-58,-23],
+["UY","烏拉圭",-56,-33],["GY","蓋亞那",-58.9,4.9],["SR","蘇利南",-56,4],
+["AU","澳洲",134,-25],["NZ","紐西蘭",172,-41],["FJ","斐濟",178,-18],
+["PG","巴布亞紐幾內亞",147,-6.3],["WS","薩摩亞",-172,-13.8],["TO","東加",-175,-21.2],
+["VU","萬那杜",167,-16],["SB","索羅門群島",159,-9],["PW","帛琉",134.5,7.5],
+["FM","密克羅尼西亞",150,7],["MH","馬紹爾群島",171,7],["KI","吉里巴斯",173,1.3],
+["NR","諾魯",166.9,-0.5],["TV","吐瓦魯",179,-7.5],
+["EG","埃及",30,26],["LY","利比亞",17,27],["TN","突尼西亞",9,34],
+["DZ","阿爾及利亞",3,28],["MA","摩洛哥",-7,32],["SD","蘇丹",30,15.6],
+["SS","南蘇丹",30,7],["ET","衣索比亞",40,9],["ER","厄利垂亞",39,15.2],
+["DJ","吉布地",43,11.8],["SO","索馬利亞",46,5.2],["KE","肯亞",38,1],
+["UG","烏干達",32,1.3],["TZ","坦尚尼亞",35,-6.4],["RW","盧安達",30,-2],
+["BI","蒲隆地",29.9,-3.4],["CD","剛果民主共和國",23,-2.9],["CG","剛果共和國",15.8,-0.2],
+["GA","加彭",11.6,-0.8],["CM","喀麥隆",12.4,7.4],["CF","中非共和國",20.9,6.6],
+["TD","查德",18.7,15.5],["NE","尼日",8,17.6],["NG","奈及利亞",8,9.1],
+["BJ","貝南",2.3,9.3],["TG","多哥",1,8.6],["GH","迦納",-1,8],
+["CI","象牙海岸",-5.5,7.5],["LR","賴比瑞亞",-9.4,6.4],["SL","獅子山",-11.8,8.5],
+["GN","幾內亞",-9.7,9.9],["GW","幾內亞比索",-15,12],["SN","塞內加爾",-14.5,14.5],
+["GM","甘比亞",-15.3,13.4],["ML","馬利",-4,17.6],["BF","布吉納法索",-1.5,12.2],
+["MR","茅利塔尼亞",-10.9,21.0],["ZA","南非",24,-29],["NA","納米比亞",17,-22.6],
+["BW","波札那",24,-22],["ZW","辛巴威",29.2,-19],["ZM","尚比亞",27.8,-13.1],
+["MW","馬拉威",34.3,-13.3],["MZ","莫三比克",35.5,-18.7],["AO","安哥拉",17.9,-11.2],
+["SZ","史瓦帝尼",31.5,-26.5],["LS","賴索托",28.2,-29.6],["MG","馬達加斯加",46.9,-18.9],
+["MU","模里西斯",57.6,-20.3],["SC","塞席爾",55.5,-4.6],["KM","葛摩",43.3,-11.9],
+["CV","維德角",-24,16]
+];
+const COUNTRY_LIST = COUNTRY_DB.map(c => [c[0], c[1]]);
+const COUNTRY_COORDS = {};
+COUNTRY_DB.forEach(c => { COUNTRY_COORDS[c[0]] = [c[2], c[3]]; });
+
+/* 城市資料庫：城市名 → [國碼, 緯度, 經度]（靜態內建，非外部API） */
+const CITY_DB = {
+  "開普敦":["ZA",-33.92,18.42],"約翰尼斯堡":["ZA",-26.20,28.05],
+  "東京":["JP",35.68,139.69],"大阪":["JP",34.69,135.50],"京都":["JP",35.01,135.77],
+  "神戶":["JP",34.69,135.20],"鳥取":["JP",35.50,134.24],
+  "首爾":["KR",37.57,126.98],"釜山":["KR",35.18,129.08],
+  "北京":["CN",39.90,116.41],"上海":["CN",31.23,121.47],"蓬萊":["CN",37.81,120.76],
+  "曼谷":["TH",13.76,100.50],"清邁":["TH",18.79,98.99],
+  "河內":["VN",21.03,105.85],"胡志明市":["VN",10.82,106.63],
+  "吉隆坡":["MY",3.14,101.69],"巴黎":["FR",48.86,2.35],"倫敦":["GB",51.51,-0.13],
+  "羅馬":["IT",41.90,12.50],"米蘭":["IT",45.46,9.19],
+  "馬德里":["ES",40.42,-3.70],"巴塞隆納":["ES",41.39,2.17],
+  "柏林":["DE",52.52,13.40],"慕尼黑":["DE",48.14,11.58],
+  "紐約":["US",40.71,-74.01],"洛杉磯":["US",34.05,-118.24],"舊金山":["US",37.77,-122.42],
+  "多倫多":["CA",43.65,-79.38],
+  "雪梨":["AU",-33.87,151.21],"墨爾本":["AU",-37.81,144.96],"奧克蘭":["NZ",-36.85,174.76],
+  "開羅":["EG",30.04,31.24],"杜拜":["AE",25.20,55.27],
+  "里約熱內盧":["BR",-22.91,-43.17],"聖保羅":["BR",-23.55,-46.63],
+  "布宜諾斯艾利斯":["AR",-34.60,-58.38],"雷克雅維克":["IS",64.15,-21.94],
+  "都柏林":["IE",53.35,-6.26],"哈瓦那":["CU",23.13,-82.38],"馬拉喀什":["MA",31.63,-7.99]
+};
+
+/* 首次使用自動建立預設授權碼（僅在節點不存在時建立，不覆蓋既有資料） */
+function ensureDefaultAuthCode() {
+  if (!_firebaseReady) return;
+  db.ref(`${AUTH_KEY_NAME}/${DEFAULT_AUTH_CODE}`).once('value').then(snap => {
+    if (!snap.exists()) {
+      db.ref(`${AUTH_KEY_NAME}/${DEFAULT_AUTH_CODE}`).update({
+        code: DEFAULT_AUTH_CODE,
+        status: "active",
+        createdAt: Date.now(),
+        usageCount: 0
+      });
+    }
+  });
+}
+
+/* ============================================================
+   初始化 Firebase
+   ============================================================ */
+function initFirebase() {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    _firebaseReady = true;
+    document.getElementById('syncStatus').textContent = '已連線';
+    ensureDefaultAuthCode();
+  } catch (e) {
+    _firebaseReady = false;
+    document.getElementById('syncStatus').textContent = '連線失敗';
+    console.error('Firebase 初始化失敗：', e);
+  }
+}
+initFirebase();
+
+/* ============================================================
+   授權登入（RED-05）
+   授權碼結構：code / status / createdAt / expireAt / usageLimit / usageCount / note
+   ============================================================ */
+function handleLogin() {
+  const code = document.getElementById('authCodeInput').value.trim();
+  const msgEl = document.getElementById('loginMsg');
+  msgEl.textContent = '';
+
+  if (!code) {
+    msgEl.textContent = '請輸入授權碼';
+    return;
+  }
+  if (!_firebaseReady) {
+    msgEl.textContent = 'Firebase 尚未就緒，請稍後再試';
+    return;
+  }
+
+  msgEl.textContent = '驗證中...';
+
+  db.ref(`${AUTH_KEY_NAME}/${code}`).once('value')
+    .then(snapshot => {
+      const authData = snapshot.val();
+
+      if (!authData) {
+        msgEl.textContent = '授權碼不存在';
+        return;
+      }
+      if (authData.status !== 'active') {
+        msgEl.textContent = '此授權碼已停用';
+        return;
+      }
+      if (authData.expireAt && Date.now() > authData.expireAt) {
+        msgEl.textContent = '此授權碼已過期';
+        return;
+      }
+      if (authData.usageLimit && (authData.usageCount || 0) >= authData.usageLimit) {
+        msgEl.textContent = '此授權碼已達使用上限';
+        return;
+      }
+
+      // 登入成功
+      currentAuthCode = code;
+      currentSpaceKey = code; // 以授權碼作為資料隔離 key
+      localStorage.setItem('travel_authCode', code);
+
+      // 更新使用次數（僅使用 update，不可用 set）
+      db.ref(`${AUTH_KEY_NAME}/${code}`).update({
+        usageCount: (authData.usageCount || 0) + 1
+      });
+
+      enterApp();
+    })
+    .catch(err => {
+      msgEl.textContent = '驗證失敗，請檢查網路連線';
+      console.error(err);
+    });
+}
+
+function tryAutoLogin() {
+  const saved = localStorage.getItem('travel_authCode');
+  if (saved) {
+    document.getElementById('authCodeInput').value = saved;
+    handleLogin();
+  }
+}
+
+function enterApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  renderContinentFilter();
+  renderWorldMap();
+  listenToData();
+}
+
+/* ============================================================
+   資料監聽（即時同步）
+   ============================================================ */
+function listenToData() {
+  if (!_firebaseReady) return;
+  document.getElementById('syncStatus').textContent = '同步中...';
+
+  db.ref(`${APP_KEY_NAME}/${currentSpaceKey}`).on('value', snapshot => {
+    const val = snapshot.val();
+    countriesData = val || {};
+    localStorage.setItem('travel_countries_cache', JSON.stringify(countriesData));
+    document.getElementById('syncStatus').textContent = '已同步';
+    renderStats();
+    renderContinentFilter();
+    renderList();
+    renderWorldMap();
+  }, err => {
+    console.error('讀取失敗：', err);
+    document.getElementById('syncStatus').textContent = '同步異常（離線快取中）';
+    const cached = localStorage.getItem('travel_countries_cache');
+    if (cached) {
+      countriesData = JSON.parse(cached);
+      renderStats();
+      renderContinentFilter();
+      renderList();
+      renderWorldMap();
+    }
+  });
+
+  db.ref(VISITORS_KEY_NAME).on('value', snapshot => {
+    visitorsData = snapshot.val() || {};
+    renderVisitorManageList();
+    renderWorldMap();
+  });
+}
+
+/* ============================================================
+   共用者名單管理
+   ============================================================ */
+function openVisitorManager() {
+  document.getElementById('visitorModal').classList.add('show');
+  renderVisitorManageList();
+}
+
+function closeVisitorManager() {
+  document.getElementById('visitorModal').classList.remove('show');
+  populateVisitorDatalist();
+}
+
+function renderVisitorManageList() {
+  const el = document.getElementById('visitorManageList');
+  const ids = Object.keys(visitorsData);
+  if (ids.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:10px 0;">尚無共用者，請於下方新增</div>';
+    return;
+  }
+  el.innerHTML = ids.map(id => {
+    const v = visitorsData[id];
+    return `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;">
+        <input type="color" value="${v.color || '#888888'}" onchange="updateVisitorColor('${id}', this.value)" style="width:32px;height:32px;padding:0;border:none;border-radius:6px;">
+        <span style="flex:1;font-size:14px;">${escapeHtml(v.name)}</span>
+        <button class="icon-btn del" onclick="deleteVisitor('${id}')">🗑️</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addVisitor() {
+  const nameInput = document.getElementById('newVisitorName');
+  const colorInput = document.getElementById('newVisitorColor');
+  const name = nameInput.value.trim();
+  if (!name) { showToast('請輸入姓名'); return; }
+  if (!_firebaseReady) { showToast('Firebase 未就緒'); return; }
+
+  const id = db.ref(VISITORS_KEY_NAME).push().key;
+  db.ref(`${VISITORS_KEY_NAME}/${id}`).update({ name: name, color: colorInput.value })
+    .then(() => { nameInput.value = ''; showToast('已新增共用者'); })
+    .catch(err => { console.error(err); showToast('新增失敗'); });
+}
+
+function updateVisitorColor(id, color) {
+  if (!_firebaseReady) return;
+  db.ref(`${VISITORS_KEY_NAME}/${id}`).update({ color: color })
+    .catch(err => console.error('更新顏色失敗：', err));
+}
+
+function deleteVisitor(id) {
+  if (!confirm('確定要刪除此共用者嗎？（不會刪除已建立的旅遊紀錄）')) return;
+  if (!_firebaseReady) return;
+  db.ref(`${VISITORS_KEY_NAME}/${id}`).remove()
+    .then(() => showToast('已刪除'))
+    .catch(err => { console.error(err); showToast('刪除失敗'); });
+}
+
+/* ============================================================
+   表單操作
+   ============================================================ */
+function populateCountrySelect() {
+  const dl = document.getElementById('countryDatalist');
+  const options = COUNTRY_LIST.map(([code, name]) => `${name}`)
+    .concat(Object.keys(CITY_DB));
+  dl.innerHTML = options.map(v => `<option value="${v}"></option>`).join('');
+}
+
+function resolveCountryInput(text) {
+  text = text.trim();
+  if (!text) return null;
+
+  // 1. 完全比對城市
+  if (CITY_DB[text]) {
+    const [code, lat, lon] = CITY_DB[text];
+    const found = COUNTRY_LIST.find(c => c[0] === code);
+    return found ? { code: found[0], name: found[1], cityName: text, cityLat: lat, cityLon: lon } : null;
+  }
+  // 2. 完全比對國家
+  const exactCountry = COUNTRY_LIST.find(c => c[1] === text || c[0] === text.toUpperCase());
+  if (exactCountry) return { code: exactCountry[0], name: exactCountry[1], cityName: '', cityLat: '', cityLon: '' };
+
+  // 3. 模糊比對城市（部分文字相符）
+  const cityKey = Object.keys(CITY_DB).find(name => name.includes(text) || text.includes(name));
+  if (cityKey) {
+    const [code, lat, lon] = CITY_DB[cityKey];
+    const found = COUNTRY_LIST.find(c => c[0] === code);
+    return found ? { code: found[0], name: found[1], cityName: cityKey, cityLat: lat, cityLon: lon } : null;
+  }
+  // 4. 模糊比對國家（部分文字相符）
+  const fuzzyCountry = COUNTRY_LIST.find(c => c[1].includes(text) || text.includes(c[1]));
+  if (fuzzyCountry) return { code: fuzzyCountry[0], name: fuzzyCountry[1], cityName: '', cityLat: '', cityLon: '' };
+
+  return null;
+}
+
+function onCountrySearchInput() {
+  const text = document.getElementById('f_countrySearch').value;
+  const matched = resolveCountryInput(text);
+  document.getElementById('f_countryCode').value = matched ? matched.code : '';
+  document.getElementById('f_countryName').value = matched ? matched.name : '';
+  document.getElementById('f_cityName').value = matched ? matched.cityName : '';
+  document.getElementById('f_cityLat').value = matched ? matched.cityLat : '';
+  document.getElementById('f_cityLon').value = matched ? matched.cityLon : '';
+}
+
+function openForm(id) {
+  editingId = id || null;
+  document.getElementById('formTitle').textContent = id ? '編輯國家紀錄' : '新增國家紀錄';
+  populateCountrySelect();
+  populateVisitorDatalist();
+
+  if (id && countriesData[id]) {
+    const d = countriesData[id];
+    document.getElementById('f_countryCode').value = d.countryCode || '';
+    document.getElementById('f_countryName').value = d.countryName || '';
+    document.getElementById('f_countrySearch').value = d.cityName || d.countryName || '';
+    document.getElementById('f_cityName').value = d.cityName || '';
+    document.getElementById('f_cityLat').value = d.cityLat || '';
+    document.getElementById('f_cityLon').value = d.cityLon || '';
+    document.getElementById('f_visitor').value = d.visitor || '';
+    document.getElementById('f_visitType').value = d.visitType || '';
+    document.getElementById('f_visitYear').value = d.visitYear || '';
+    document.getElementById('f_visitNote').value = d.visitNote || '';
+  } else {
+    document.getElementById('f_countryCode').value = '';
+    document.getElementById('f_countryName').value = '';
+    document.getElementById('f_countrySearch').value = '';
+    document.getElementById('f_cityName').value = '';
+    document.getElementById('f_cityLat').value = '';
+    document.getElementById('f_cityLon').value = '';
+    document.getElementById('f_visitor').value = localStorage.getItem('travel_lastVisitor') || '';
+    document.getElementById('f_visitType').value = '';
+    document.getElementById('f_visitYear').value = '';
+    document.getElementById('f_visitNote').value = '';
+  }
+
+  document.getElementById('formModal').classList.add('show');
+}
+
+function populateVisitorDatalist() {
+  const sel = document.getElementById('f_visitor');
+  const ids = Object.keys(visitorsData);
+  if (ids.length === 0) {
+    sel.innerHTML = '<option value="">尚無共用者，請先新增</option>';
+    return;
+  }
+  sel.innerHTML = ids.map(id => {
+    const v = visitorsData[id];
+    return `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)}</option>`;
+  }).join('');
+  const last = localStorage.getItem('travel_lastVisitor');
+  if (last && Object.values(visitorsData).some(v => v.name === last)) sel.value = last;
+}
+
+function closeForm() {
+  document.getElementById('formModal').classList.remove('show');
+  editingId = null;
+}
+
+function saveCountry() {
+  if (!_firebaseReady) {
+    showToast('Firebase 未就緒，無法儲存');
+    return;
+  }
+
+  const countryCode = document.getElementById('f_countryCode').value.trim().toUpperCase();
+  const countryName = document.getElementById('f_countryName').value.trim();
+  const cityName = document.getElementById('f_cityName').value.trim();
+  const cityLat = document.getElementById('f_cityLat').value.trim();
+  const cityLon = document.getElementById('f_cityLon').value.trim();
+  const visitor = document.getElementById('f_visitor').value.trim();
+  const visitType = document.getElementById('f_visitType').value.trim();
+  const visitYear = document.getElementById('f_visitYear').value.trim();
+  const visitNote = document.getElementById('f_visitNote').value.trim();
+
+  if (!countryName && !countryCode) {
+    showToast('請輸入有效的國家或城市名稱');
+    return;
+  }
+
+  const now = Date.now();
+  const id = editingId || db.ref(`${APP_KEY_NAME}/${currentSpaceKey}`).push().key;
+
+  const payload = {};
+  // RED-06：空值不可覆蓋既有資料 -> 僅寫入有值欄位
+  if (countryCode) payload.countryCode = countryCode;
+  if (countryName) payload.countryName = countryName;
+  if (cityName) payload.cityName = cityName;
+  if (visitor) { payload.visitor = visitor; localStorage.setItem('travel_lastVisitor', visitor); }
+  if (visitType) payload.visitType = visitType;
+  if (cityLat) payload.cityLat = cityLat;
+  if (cityLon) payload.cityLon = cityLon;
+  if (visitYear) payload.visitYear = visitYear;
+  if (visitNote) payload.visitNote = visitNote;
+  payload.updatedAt = now;
+  if (!editingId) payload.createdAt = now;
+
+  db.ref(`${APP_KEY_NAME}/${currentSpaceKey}/${id}`).update(payload)
+    .then(() => {
+      showToast('已儲存');
+      closeForm();
+    })
+    .catch(err => {
+      console.error('儲存失敗：', err);
+      showToast('儲存失敗');
+    });
+}
+
+function deleteCountry(id) {
+  if (!confirm('確定要刪除這筆紀錄嗎？')) return;
+  if (!_firebaseReady) {
+    showToast('Firebase 未就緒，無法刪除');
+    return;
+  }
+  db.ref(`${APP_KEY_NAME}/${currentSpaceKey}/${id}`).remove()
+    .then(() => showToast('已刪除'))
+    .catch(err => {
+      console.error('刪除失敗：', err);
+      showToast('刪除失敗');
+    });
+}
+
+/* ============================================================
+   清單渲染
+   ============================================================ */
+function renderList() {
+  const listEl = document.getElementById('countryList');
+  const filtered = getFilteredEntries();
+  const ids = filtered.map(([id]) => id);
+  document.getElementById('countBadge').textContent = `${ids.length} 國`;
+
+  if (ids.length === 0) {
+    listEl.innerHTML = '<div class="empty-state">尚無紀錄，點擊右下角「＋」新增</div>';
+    return;
+  }
+
+  // 依造訪年份排序（新到舊），無年份排最後
+  ids.sort((a, b) => {
+    const ya = parseInt(countriesData[a].visitYear) || 0;
+    const yb = parseInt(countriesData[b].visitYear) || 0;
+    return yb - ya;
+  });
+
+  listEl.innerHTML = ids.map(id => {
+    const d = countriesData[id];
+    const name = d.cityName ? `${d.cityName}（${d.countryName || d.countryCode}）` : (d.countryName || d.countryCode || '（未命名）');
+    const meta = [d.countryCode, d.visitYear ? `${d.visitYear} 年` : null, d.visitor ? `👤${d.visitor}` : null, d.visitType || null].filter(Boolean).join(' ・ ');
+    const note = d.visitNote ? `<div class="note">${escapeHtml(d.visitNote)}</div>` : '';
+    return `
+      <div class="country-item">
+        <div class="info">
+          <div class="name">${escapeHtml(name)}</div>
+          ${meta ? `<div class="meta">${escapeHtml(meta)}</div>` : ''}
+          ${note}
+        </div>
+        <div class="actions">
+          <button class="icon-btn" onclick="openForm('${id}')">✏️</button>
+          <button class="icon-btn del" onclick="deleteCountry('${id}')">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ============================================================
+   靜態 SVG 世界地圖（簡化版輔助標記，禁止即時地圖/外部API）
+   以「已造訪國碼清單」標記顏色，採極簡圓點式示意圖（非精確地理輪廓）
+   ============================================================ */
+let leafletMap = null;
+let leafletMarkers = [];
+
+/* 國碼→洲別對照（靜態內建） */
+const CONTINENT_MAP = {
+  Asia: ["TW","JP","KR","KP","CN","HK","MO","MN","TH","VN","LA","KH","MM","SG","MY","PH","ID","BN","TL","IN","PK","BD","LK","NP","BT","MV","KZ","UZ","TM","TJ","KG","AF","IR","IQ","SA","AE","QA","KW","BH","OM","YE","JO","IL","PS","LB","SY","TR","CY","GE","AM","AZ"],
+  Europe: ["RU","GB","IE","FR","DE","NL","BE","LU","CH","AT","IT","ES","PT","AD","MC","SM","VA","MT","GR","AL","MK","BG","RO","RS","HR","SI","BA","ME","XK","PL","CZ","SK","HU","UA","BY","MD","LT","LV","EE","SE","NO","FI","DK","IS"],
+  NorthAmerica: ["US","CA","MX","GT","BZ","HN","SV","NI","CR","PA","CU","JM","HT","DO","BS","TT","BB"],
+  SouthAmerica: ["BR","AR","CL","PE","CO","VE","EC","BO","PY","UY","GY","SR"],
+  Oceania: ["AU","NZ","FJ","PG","WS","TO","VU","SB","PW","FM","MH","KI","NR","TV"],
+  Africa: ["EG","LY","TN","DZ","MA","SD","SS","ET","ER","DJ","SO","KE","UG","TZ","RW","BI","CD","CG","GA","CM","CF","TD","NE","NG","BJ","TG","GH","CI","LR","SL","GN","GW","SN","GM","ML","BF","MR","ZA","NA","BW","ZW","ZM","MW","MZ","AO","SZ","LS","MG","MU","SC","KM","CV"]
+};
+/* 造訪者姓名 → 固定色碼（簡易雜湊，非外部API） */
+const VISITOR_PALETTE = ["#e8483b","#3b82c4","#2e9e6b","#d4a72c","#9b59b6","#e0673e","#1abc9c","#c0392b"];
+function getVisitorColor(name) {
+  if (!name) return "#555";
+  const found = Object.values(visitorsData).find(v => v.name === name);
+  if (found && found.color) return found.color;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return VISITOR_PALETTE[Math.abs(hash) % VISITOR_PALETTE.length];
+}
+
+function pinIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;border-radius:50% 50% 50% 0;background:${color};border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [14,14], iconAnchor: [7,14]
+  });
+}
+const CONTINENT_NAME = { Asia:'亞洲', Europe:'歐洲', NorthAmerica:'北美洲', SouthAmerica:'南美洲', Oceania:'大洋洲', Africa:'非洲' };
+
+function getContinentKey(code) {
+  for (const k in CONTINENT_MAP) {
+    if (CONTINENT_MAP[k].includes(code)) return k;
+  }
+  return null;
+}
+
+function getFilteredEntries() {
+  const all = Object.entries(countriesData);
+  if (!activeContinent) return all;
+  return all.filter(([id, d]) => getContinentKey(d.countryCode) === activeContinent);
+}
+
+function renderContinentFilter() {
+  const el = document.getElementById('continentFilter');
+  const usedContinents = new Set(Object.values(countriesData).map(d => getContinentKey(d.countryCode)).filter(Boolean));
+  const chip = (key, label) => {
+    const active = activeContinent === key;
+    const disabled = key && !usedContinents.has(key);
+    return `<button onclick="setContinentFilter(${key ? `'${key}'` : 'null'})"
+      style="flex-shrink:0;padding:6px 12px;border-radius:16px;border:1px solid ${active?'#2c5f6f':'#ddd'};
+      background:${active?'#2c5f6f':'#fff'};color:${active?'#fff':(disabled?'#ccc':'#555')};font-size:12px;white-space:nowrap;">${label}</button>`;
+  };
+  el.innerHTML = chip(null, '全部') + Object.keys(CONTINENT_NAME).map(k => chip(k, CONTINENT_NAME[k])).join('');
+}
+
+function setContinentFilter(key) {
+  activeContinent = key;
+  renderContinentFilter();
+  renderList();
+  renderWorldMap();
+}
+
+function renderStats() {
+  const all = Object.values(countriesData).filter(d => d.countryCode);
+  const continentsUsed = new Set(all.map(d => getContinentKey(d.countryCode)).filter(Boolean));
+  document.getElementById('statCountries').textContent = new Set(all.map(d => d.countryCode)).size;
+  document.getElementById('statContinents').textContent = `${continentsUsed.size}/6`;
+  document.getElementById('statCities').textContent = all.filter(d => d.cityName).length;
+}
+
+function renderWorldMap() {
+  // 知名度高的國家，地圖標籤只顯示城市，不重複加註國名
+  const WELL_KNOWN = new Set(["JP","KR","CN","US","GB","FR","DE","IT","TH","AU","CA"]);
+  const entries = getFilteredEntries().map(([id, d]) => d).filter(d => d.countryCode && COUNTRY_COORDS[d.countryCode]);
+  const pins = entries.map(d => {
+    let lat, lon, label;
+    if (d.cityLat && d.cityLon) {
+      lat = parseFloat(d.cityLat); lon = parseFloat(d.cityLon);
+      label = WELL_KNOWN.has(d.countryCode) ? d.cityName : `${d.cityName}（${d.countryName || d.countryCode}）`;
+    } else {
+      [lon, lat] = COUNTRY_COORDS[d.countryCode];
+      label = d.countryName || d.countryCode;
+    }
+    return { lat, lon, name: label, color: getVisitorColor(d.visitor), visitor: d.visitor || '' };
+  });
+
+  if (!leafletMap) {
+    leafletMap = L.map('worldMapContainer', {
+      worldCopyJump: false,
+      maxBounds: [[-90, -180], [90, 180]],
+      maxBoundsViscosity: 1.0
+    }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 18,
+      noWrap: true
+    }).addTo(leafletMap);
+  }
+
+  leafletMarkers.forEach(m => leafletMap.removeLayer(m));
+  leafletMarkers = [];
+
+  pins.forEach(p => {
+    const marker = L.marker([p.lat, p.lon], { icon: pinIcon(p.color) }).addTo(leafletMap);
+    marker.bindPopup(`📍 ${escapeHtml(p.name)}${p.visitor ? ` ・ 👤${escapeHtml(p.visitor)}` : ''}`);
+    marker.bindTooltip(p.name, { permanent: true, direction: 'top', offset: [0, -14], className: 'pin-label' });
+    leafletMarkers.push(marker);
+  });
+
+  setTimeout(() => {
+    leafletMap.invalidateSize();
+    if (pins.length > 0) {
+      const bounds = L.latLngBounds(pins.map(p => [p.lat, p.lon]));
+      leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+    }
+  }, 100);
+}
+
+/* ============================================================
+   匯出 / 匯入 JSON（RED-07）
+   ============================================================ */
+function exportData() {
+  const blob = new Blob([JSON.stringify(countriesData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `visited_countries_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已匯出');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+
+      // 驗證結構：必須為物件，且每筆需有 countryName 或 countryCode
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('格式錯誤：根節點需為物件');
+      }
+      for (const key in parsed) {
+        const item = parsed[key];
+        if (typeof item !== 'object' || (!item.countryName && !item.countryCode)) {
+          throw new Error('格式錯誤：每筆紀錄需包含 countryName 或 countryCode');
+        }
+      }
+
+      if (!_firebaseReady) {
+        showToast('Firebase 未就緒，無法匯入');
+        return;
+      }
+
+      // RED-07：匯入錯誤不得覆蓋既有資料 -> 驗證通過後才以 update() 合併寫入
+      db.ref(`${APP_KEY_NAME}/${currentSpaceKey}`).update(parsed)
+        .then(() => showToast('匯入成功'))
+        .catch(err => {
+          console.error('匯入寫入失敗：', err);
+          showToast('匯入寫入失敗');
+        });
+
+    } catch (err) {
+      console.error('匯入失敗：', err);
+      showToast('匯入失敗：' + err.message);
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+/* ============================================================
+   啟動
+   ============================================================ */
+window.addEventListener('load', () => {
+  setTimeout(tryAutoLogin, 300);
+});
+</script>
+
+</body>
+</html>
