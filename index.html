@@ -126,7 +126,7 @@
 <!-- ===== 主畫面 ===== -->
 <div id="appScreen">
   <header>
-    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v1</span></h1>
+    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v2</span></h1>
     <div class="status" id="syncStatus">同步中...</div>
   </header>
 
@@ -318,6 +318,15 @@ const COUNTRY_DB = [
 ["CV","維德角",-24,16]
 ];
 const COUNTRY_LIST = COUNTRY_DB.map(c => [c[0], c[1]]);
+
+/* 常見異體譯名 → 國碼（靜態內建，輔助搜尋用） */
+const COUNTRY_ALIAS = {
+  "莫里西斯":"MU","毛里求斯":"MU","莫桑比克":"MZ","紐西蘭":"NZ","新西蘭":"NZ",
+  "象牙海岸":"CI","科特迪瓦":"CI","柬埔寨":"KH","高棉":"KH","緬甸":"MM",
+  "土耳其":"TR","土耳其共和國":"TR","捷克":"CZ","捷克共和國":"CZ",
+  "格魯吉亞":"GE","喬治亞":"GE","亞美尼亞":"AM","阿曼":"OM","卡達":"QA","卡塔爾":"QA",
+  "幾內亞比索":"GW","史瓦帝尼":"SZ","斯威士蘭":"SZ","賴索托":"LS"
+};
 const COUNTRY_COORDS = {};
 COUNTRY_DB.forEach(c => { COUNTRY_COORDS[c[0]] = [c[2], c[3]]; });
 
@@ -552,7 +561,8 @@ function deleteVisitor(id) {
 function populateCountrySelect() {
   const dl = document.getElementById('countryDatalist');
   const options = COUNTRY_LIST.map(([code, name]) => `${name}`)
-    .concat(Object.keys(CITY_DB));
+    .concat(Object.keys(CITY_DB))
+    .concat(Object.keys(COUNTRY_ALIAS));
   dl.innerHTML = options.map(v => `<option value="${v}"></option>`).join('');
 }
 
@@ -569,6 +579,12 @@ function resolveCountryInput(text) {
   // 2. 完全比對國家
   const exactCountry = COUNTRY_LIST.find(c => c[1] === text || c[0] === text.toUpperCase());
   if (exactCountry) return { code: exactCountry[0], name: exactCountry[1], cityName: '', cityLat: '', cityLon: '' };
+
+  // 2b. 異體譯名比對
+  if (COUNTRY_ALIAS[text]) {
+    const found = COUNTRY_LIST.find(c => c[0] === COUNTRY_ALIAS[text]);
+    if (found) return { code: found[0], name: found[1], cityName: '', cityLat: '', cityLon: '' };
+  }
 
   // 3. 模糊比對城市（部分文字相符）
   const cityKey = Object.keys(CITY_DB).find(name => name.includes(text) || text.includes(name));
