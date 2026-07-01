@@ -126,7 +126,7 @@
 <!-- ===== 主畫面 ===== -->
 <div id="appScreen">
   <header>
-    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v6</span></h1>
+    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v8</span></h1>
     <div class="status" id="syncStatus">同步中...</div>
   </header>
 
@@ -224,8 +224,25 @@
       </select>
     </div>
     <div class="form-row">
-      <label>造訪年份（選填）</label>
-      <input id="f_visitYear" type="number" placeholder="例如 2026">
+      <label>造訪年份／月份（選填）</label>
+      <div style="display:flex;gap:8px;">
+        <input id="f_visitYear" type="number" placeholder="年份 例如 2026" style="flex:2;">
+        <select id="f_visitMonth" style="flex:1;">
+          <option value="">月份</option>
+          <option value="1">1 月</option>
+          <option value="2">2 月</option>
+          <option value="3">3 月</option>
+          <option value="4">4 月</option>
+          <option value="5">5 月</option>
+          <option value="6">6 月</option>
+          <option value="7">7 月</option>
+          <option value="8">8 月</option>
+          <option value="9">9 月</option>
+          <option value="10">10 月</option>
+          <option value="11">11 月</option>
+          <option value="12">12 月</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
       <label>備註（選填）</label>
@@ -793,6 +810,7 @@ function openForm(id) {
     document.getElementById('f_pinColor').value = d.pinColor || '#e8483b';
     document.getElementById('f_visitType').value = d.visitType || '';
     document.getElementById('f_visitYear').value = d.visitYear || '';
+    document.getElementById('f_visitMonth').value = d.visitMonth || '';
     document.getElementById('f_visitNote').value = d.visitNote || '';
     if (d.cityName) showLocResult(d.cityName + (d.countryName ? `（${d.countryName}）` : ''));
   } else {
@@ -806,6 +824,7 @@ function openForm(id) {
     document.getElementById('f_pinColor').value = '#e8483b';
     document.getElementById('f_visitType').value = '';
     document.getElementById('f_visitYear').value = '';
+    document.getElementById('f_visitMonth').value = '';
     document.getElementById('f_visitNote').value = '';
   }
 
@@ -862,6 +881,7 @@ function saveCountry() {
   const pinColor = document.getElementById('f_pinColor').value;
   const visitType = document.getElementById('f_visitType').value.trim();
   const visitYear = document.getElementById('f_visitYear').value.trim();
+  const visitMonth = document.getElementById('f_visitMonth').value;
   const visitNote = document.getElementById('f_visitNote').value.trim();
 
   if (!countryName && !countryCode) {
@@ -882,6 +902,7 @@ function saveCountry() {
   if (cityLat) payload.cityLat = cityLat;
   if (cityLon) payload.cityLon = cityLon;
   if (visitYear) payload.visitYear = visitYear;
+  if (visitMonth) payload.visitMonth = visitMonth;
   if (visitNote) payload.visitNote = visitNote;
   payload.updatedAt = now;
   if (!editingId) payload.createdAt = now;
@@ -936,7 +957,8 @@ function renderList() {
     const d = countriesData[id];
     const name = d.cityName ? `${d.cityName}（${d.countryName || d.countryCode}）` : (d.countryName || d.countryCode || '（未命名）');
     const visitorList = Array.isArray(d.visitors) ? d.visitors : (d.visitor ? [d.visitor] : []);
-    const meta = [d.countryCode, d.visitYear ? `${d.visitYear} 年` : null, visitorList.length ? `👤${visitorList.join('、')}` : null, d.visitType || null].filter(Boolean).join(' ・ ');
+    const dateLabel = d.visitYear ? (d.visitMonth ? `${d.visitYear} 年 ${d.visitMonth} 月` : `${d.visitYear} 年`) : null;
+    const meta = [d.countryCode, dateLabel, visitorList.length ? `👤${visitorList.join('、')}` : null, d.visitType || null].filter(Boolean).join(' ・ ');
     const note = d.visitNote ? `<div class="note">${escapeHtml(d.visitNote)}</div>` : '';
     return `
       <div class="country-item">
