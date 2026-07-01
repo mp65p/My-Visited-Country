@@ -126,7 +126,7 @@
 <!-- ===== 主畫面 ===== -->
 <div id="appScreen">
   <header>
-    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v2</span></h1>
+    <h1>🌍 已造訪國家 <span style="font-size:11px;opacity:0.7;font-weight:400;">v6</span></h1>
     <div class="status" id="syncStatus">同步中...</div>
   </header>
 
@@ -168,19 +168,52 @@
 <div class="modal-overlay" id="formModal">
   <div class="modal-box">
     <h3 id="formTitle">新增國家紀錄</h3>
-    <div class="form-row">
-      <label>選擇國家</label>
-      <input id="f_countrySearch" list="countryDatalist" placeholder="輸入國家或城市，例如：開普敦" oninput="onCountrySearchInput()" autocomplete="off">
+
+    <!-- 定位模式切換 -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button id="modeSearchBtn" onclick="switchLocMode('search')"
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #2c5f6f;background:#2c5f6f;color:#fff;font-size:13px;font-weight:600;">🔍 搜尋定位</button>
+      <button id="modeMapBtn" onclick="switchLocMode('map')"
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#555;font-size:13px;">🗺️ 地圖點選</button>
+    </div>
+
+    <!-- 模式 A：搜尋 -->
+    <div id="locModeSearch" class="form-row">
+      <label>輸入國家或城市</label>
+      <input id="f_countrySearch" list="countryDatalist" placeholder="例如：開普敦、福岡、日本" oninput="onCountrySearchInput()" autocomplete="off">
+      <div id="f_searchHint" style="font-size:12px;margin-top:4px;min-height:16px;color:#888;"></div>
       <datalist id="countryDatalist"></datalist>
     </div>
+
+    <!-- 模式 B：地圖點選 -->
+    <div id="locModeMap" style="display:none;">
+      <div id="formMapPicker" style="width:100%;height:220px;border-radius:10px;margin-bottom:6px;"></div>
+      <div id="f_mapHint" style="font-size:12px;color:#888;text-align:center;margin-bottom:8px;">👆 點擊地圖選擇地點</div>
+      <div class="form-row">
+        <label>地點名稱</label>
+        <input id="f_mapCityName" placeholder="例如：福岡天神">
+      </div>
+    </div>
+
+    <!-- 定位結果顯示 -->
+    <div id="f_locResult" style="display:none;font-size:12px;background:#f0f7f5;border-radius:8px;padding:8px 12px;margin-bottom:8px;color:#2c5f6f;"></div>
+
     <input type="hidden" id="f_countryCode">
     <input type="hidden" id="f_countryName">
     <input type="hidden" id="f_cityName">
     <input type="hidden" id="f_cityLat">
     <input type="hidden" id="f_cityLon">
+
     <div class="form-row">
       <label>造訪者　<a href="javascript:void(0)" onclick="openVisitorManager()" style="font-size:12px;color:#2c5f6f;">管理共用者名單</a></label>
-      <select id="f_visitor"></select>
+      <div id="f_visitorCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0;"></div>
+    </div>
+    <div class="form-row">
+      <label>圖釘顏色</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <input id="f_pinColor" type="color" value="#e8483b" style="width:44px;height:40px;padding:2px;border-radius:8px;border:1px solid #ddd;">
+        <span style="font-size:12px;color:#888;">此筆紀錄在地圖上的顏色</span>
+      </div>
     </div>
     <div class="form-row">
       <label>旅行類型</label>
@@ -212,7 +245,6 @@
     <div id="visitorManageList" style="margin-bottom:14px;"></div>
     <div class="form-row" style="display:flex;gap:8px;align-items:center;">
       <input id="newVisitorName" placeholder="新增姓名" style="flex:1;">
-      <input id="newVisitorColor" type="color" value="#e8483b" style="width:44px;height:42px;padding:2px;border-radius:8px;">
       <button class="icon-btn" onclick="addVisitor()" style="width:42px;height:42px;font-size:18px;">＋</button>
     </div>
     <div class="form-actions">
@@ -520,7 +552,6 @@ function renderVisitorManageList() {
     const v = visitorsData[id];
     return `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;">
-        <input type="color" value="${v.color || '#888888'}" onchange="updateVisitorColor('${id}', this.value)" style="width:32px;height:32px;padding:0;border:none;border-radius:6px;">
         <span style="flex:1;font-size:14px;">${escapeHtml(v.name)}</span>
         <button class="icon-btn del" onclick="deleteVisitor('${id}')">🗑️</button>
       </div>
@@ -530,21 +561,14 @@ function renderVisitorManageList() {
 
 function addVisitor() {
   const nameInput = document.getElementById('newVisitorName');
-  const colorInput = document.getElementById('newVisitorColor');
   const name = nameInput.value.trim();
   if (!name) { showToast('請輸入姓名'); return; }
   if (!_firebaseReady) { showToast('Firebase 未就緒'); return; }
 
   const id = db.ref(VISITORS_KEY_NAME).push().key;
-  db.ref(`${VISITORS_KEY_NAME}/${id}`).update({ name: name, color: colorInput.value })
+  db.ref(`${VISITORS_KEY_NAME}/${id}`).update({ name: name })
     .then(() => { nameInput.value = ''; showToast('已新增共用者'); })
     .catch(err => { console.error(err); showToast('新增失敗'); });
-}
-
-function updateVisitorColor(id, color) {
-  if (!_firebaseReady) return;
-  db.ref(`${VISITORS_KEY_NAME}/${id}`).update({ color: color })
-    .catch(err => console.error('更新顏色失敗：', err));
 }
 
 function deleteVisitor(id) {
@@ -600,42 +624,186 @@ function resolveCountryInput(text) {
   return null;
 }
 
-function onCountrySearchInput() {
-  const text = document.getElementById('f_countrySearch').value;
-  const matched = resolveCountryInput(text);
+let _nominatimTimer = null;
+let _currentLocMode = 'search'; // 'search' | 'map'
+let _formMapPicker = null;
+let _formMapMarker = null;
+
+function switchLocMode(mode) {
+  _currentLocMode = mode;
+  document.getElementById('locModeSearch').style.display = mode === 'search' ? '' : 'none';
+  document.getElementById('locModeMap').style.display = mode === 'map' ? '' : 'none';
+  document.getElementById('modeSearchBtn').style.cssText = mode === 'search'
+    ? 'flex:1;padding:8px;border-radius:8px;border:1px solid #2c5f6f;background:#2c5f6f;color:#fff;font-size:13px;font-weight:600;'
+    : 'flex:1;padding:8px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#555;font-size:13px;';
+  document.getElementById('modeMapBtn').style.cssText = mode === 'map'
+    ? 'flex:1;padding:8px;border-radius:8px;border:1px solid #2c5f6f;background:#2c5f6f;color:#fff;font-size:13px;font-weight:600;'
+    : 'flex:1;padding:8px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#555;font-size:13px;';
+
+  if (mode === 'map') {
+    setTimeout(() => initFormMapPicker(), 100);
+  }
+}
+
+function initFormMapPicker() {
+  if (_formMapPicker) {
+    _formMapPicker.invalidateSize();
+    return;
+  }
+  _formMapPicker = L.map('formMapPicker', {
+    worldCopyJump: false,
+    maxBounds: [[-90,-180],[90,180]],
+    maxBoundsViscosity: 1.0
+  }).setView([20, 0], 2);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 18, noWrap: true
+  }).addTo(_formMapPicker);
+
+  _formMapPicker.on('click', async function(e) {
+    const { lat, lng } = e.latlng;
+    if (_formMapMarker) _formMapPicker.removeLayer(_formMapMarker);
+    _formMapMarker = L.marker([lat, lng]).addTo(_formMapPicker);
+
+    document.getElementById('f_cityLat').value = lat.toFixed(6);
+    document.getElementById('f_cityLon').value = lng.toFixed(6);
+    document.getElementById('f_mapHint').textContent = '🔄 反查地名中...';
+
+    // 反查地名（Nominatim reverse geocode）
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=zh-TW,zh`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const addr = data.address || {};
+      const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || '';
+      const country = addr.country || '';
+      const countryMatch = COUNTRY_LIST.find(c => c[1] === country || country.includes(c[1]));
+
+      document.getElementById('f_countryCode').value = countryMatch ? countryMatch[0] : '';
+      document.getElementById('f_countryName').value = countryMatch ? countryMatch[1] : country;
+      if (!document.getElementById('f_mapCityName').value) {
+        document.getElementById('f_mapCityName').value = city;
+      }
+      document.getElementById('f_cityName').value = document.getElementById('f_mapCityName').value || city;
+
+      const WELL_KNOWN = new Set(["JP","KR","CN","US","GB","FR","DE","IT","TH","AU","CA"]);
+      const code = countryMatch ? countryMatch[0] : '';
+      const label = city ? (code && WELL_KNOWN.has(code) ? city : `${city}（${countryMatch ? countryMatch[1] : country}）`) : country;
+      document.getElementById('f_mapHint').textContent = `📍 已選：${label}`;
+      showLocResult(label);
+    } catch(err) {
+      document.getElementById('f_mapHint').textContent = `📍 已選：${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    }
+  });
+}
+
+function showLocResult(label) {
+  const el = document.getElementById('f_locResult');
+  el.style.display = 'block';
+  el.textContent = `📍 已定位：${label}`;
+}
+
+function setSearchResult(matched, hint) {
   document.getElementById('f_countryCode').value = matched ? matched.code : '';
   document.getElementById('f_countryName').value = matched ? matched.name : '';
   document.getElementById('f_cityName').value = matched ? matched.cityName : '';
   document.getElementById('f_cityLat').value = matched ? matched.cityLat : '';
   document.getElementById('f_cityLon').value = matched ? matched.cityLon : '';
+  document.getElementById('f_searchHint').textContent = hint || '';
+}
+
+function onCountrySearchInput() {
+  const text = document.getElementById('f_countrySearch').value.trim();
+  clearTimeout(_nominatimTimer);
+
+  if (!text) { setSearchResult(null, ''); return; }
+
+  // 先用本地資料比對
+  const matched = resolveCountryInput(text);
+  if (matched && matched.code) {
+    const label = matched.cityName ? `✅ ${matched.cityName}（${matched.name}）` : `✅ ${matched.name}`;
+    setSearchResult(matched, label);
+    return;
+  }
+
+  // 本地找不到 → debounce 500ms 後呼叫 Nominatim
+  setSearchResult(null, '🔍 查詢中...');
+  _nominatimTimer = setTimeout(() => queryNominatim(text), 500);
+}
+
+async function queryNominatim(text) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=1&accept-language=zh-TW,zh`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'zh-TW,zh' } });
+    const data = await res.json();
+
+    if (!data || data.length === 0) {
+      setSearchResult(null, '⚠️ 找不到此地點，請嘗試其他寫法');
+      return;
+    }
+
+    const item = data[0];
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+
+    // 從 display_name 推算國碼（取最後一段比對）
+    const displayName = item.display_name || '';
+    const parts = displayName.split(',').map(s => s.trim());
+    const countryName = parts[parts.length - 1];
+    const cityName = parts[0];
+
+    // 嘗試比對國碼
+    const countryMatch = COUNTRY_LIST.find(c => c[1] === countryName) ||
+      COUNTRY_LIST.find(c => countryName.includes(c[1]) || c[1].includes(countryName));
+    const code = countryMatch ? countryMatch[0] : '';
+    const cname = countryMatch ? countryMatch[1] : countryName;
+
+    const result = { code, name: cname, cityName, cityLat: lat, cityLon: lon };
+    const WELL_KNOWN = new Set(["JP","KR","CN","US","GB","FR","DE","IT","TH","AU","CA"]);
+    const label = code && WELL_KNOWN.has(code) ? `✅ ${cityName}` : `✅ ${cityName}（${cname}）`;
+    setSearchResult(result, label);
+
+  } catch (err) {
+    console.error('Nominatim 查詢失敗：', err);
+    setSearchResult(null, '⚠️ 查詢失敗，請檢查網路連線');
+  }
 }
 
 function openForm(id) {
   editingId = id || null;
   document.getElementById('formTitle').textContent = id ? '編輯國家紀錄' : '新增國家紀錄';
   populateCountrySelect();
-  populateVisitorDatalist();
+
+  // 重設定位模式為搜尋
+  switchLocMode('search');
+  document.getElementById('f_locResult').style.display = 'none';
+  document.getElementById('f_mapCityName').value = '';
+  if (_formMapMarker && _formMapPicker) { _formMapPicker.removeLayer(_formMapMarker); _formMapMarker = null; }
 
   if (id && countriesData[id]) {
     const d = countriesData[id];
+    const visitors = Array.isArray(d.visitors) ? d.visitors : (d.visitor ? [d.visitor] : []);
+    populateVisitorDatalist(visitors);
     document.getElementById('f_countryCode').value = d.countryCode || '';
     document.getElementById('f_countryName').value = d.countryName || '';
     document.getElementById('f_countrySearch').value = d.cityName || d.countryName || '';
     document.getElementById('f_cityName').value = d.cityName || '';
     document.getElementById('f_cityLat').value = d.cityLat || '';
     document.getElementById('f_cityLon').value = d.cityLon || '';
-    document.getElementById('f_visitor').value = d.visitor || '';
+    document.getElementById('f_pinColor').value = d.pinColor || '#e8483b';
     document.getElementById('f_visitType').value = d.visitType || '';
     document.getElementById('f_visitYear').value = d.visitYear || '';
     document.getElementById('f_visitNote').value = d.visitNote || '';
+    if (d.cityName) showLocResult(d.cityName + (d.countryName ? `（${d.countryName}）` : ''));
   } else {
+    populateVisitorDatalist([]);
     document.getElementById('f_countryCode').value = '';
     document.getElementById('f_countryName').value = '';
     document.getElementById('f_countrySearch').value = '';
     document.getElementById('f_cityName').value = '';
     document.getElementById('f_cityLat').value = '';
     document.getElementById('f_cityLon').value = '';
-    document.getElementById('f_visitor').value = localStorage.getItem('travel_lastVisitor') || '';
+    document.getElementById('f_pinColor').value = '#e8483b';
     document.getElementById('f_visitType').value = '';
     document.getElementById('f_visitYear').value = '';
     document.getElementById('f_visitNote').value = '';
@@ -644,24 +812,34 @@ function openForm(id) {
   document.getElementById('formModal').classList.add('show');
 }
 
-function populateVisitorDatalist() {
-  const sel = document.getElementById('f_visitor');
+function populateVisitorDatalist(selectedNames) {
+  const container = document.getElementById('f_visitorCheckboxes');
   const ids = Object.keys(visitorsData);
   if (ids.length === 0) {
-    sel.innerHTML = '<option value="">尚無共用者，請先新增</option>';
+    container.innerHTML = '<span style="font-size:13px;color:#aaa;">尚無共用者，請先新增</span>';
     return;
   }
-  sel.innerHTML = ids.map(id => {
+  const selected = Array.isArray(selectedNames) ? selectedNames : [];
+  container.innerHTML = ids.map(id => {
     const v = visitorsData[id];
-    return `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)}</option>`;
+    const checked = selected.includes(v.name) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:20px;border:1px solid #ddd;font-size:13px;cursor:pointer;">
+      <input type="checkbox" value="${escapeHtml(v.name)}" ${checked} style="accent-color:${v.color||'#2c5f6f'};">
+      <span style="width:10px;height:10px;border-radius:50%;background:${v.color||'#888'};display:inline-block;"></span>
+      ${escapeHtml(v.name)}
+    </label>`;
   }).join('');
-  const last = localStorage.getItem('travel_lastVisitor');
-  if (last && Object.values(visitorsData).some(v => v.name === last)) sel.value = last;
+}
+
+function getSelectedVisitors() {
+  const boxes = document.querySelectorAll('#f_visitorCheckboxes input[type=checkbox]:checked');
+  return Array.from(boxes).map(b => b.value);
 }
 
 function closeForm() {
   document.getElementById('formModal').classList.remove('show');
   editingId = null;
+  if (_formMapPicker) { _formMapPicker.remove(); _formMapPicker = null; _formMapMarker = null; }
 }
 
 function saveCountry() {
@@ -672,10 +850,16 @@ function saveCountry() {
 
   const countryCode = document.getElementById('f_countryCode').value.trim().toUpperCase();
   const countryName = document.getElementById('f_countryName').value.trim();
+  // 地圖選點模式下，cityName 來自 f_mapCityName
+  if (_currentLocMode === 'map') {
+    const mapCity = document.getElementById('f_mapCityName').value.trim();
+    if (mapCity) document.getElementById('f_cityName').value = mapCity;
+  }
   const cityName = document.getElementById('f_cityName').value.trim();
   const cityLat = document.getElementById('f_cityLat').value.trim();
   const cityLon = document.getElementById('f_cityLon').value.trim();
-  const visitor = document.getElementById('f_visitor').value.trim();
+  const visitors = getSelectedVisitors();
+  const pinColor = document.getElementById('f_pinColor').value;
   const visitType = document.getElementById('f_visitType').value.trim();
   const visitYear = document.getElementById('f_visitYear').value.trim();
   const visitNote = document.getElementById('f_visitNote').value.trim();
@@ -689,11 +873,11 @@ function saveCountry() {
   const id = editingId || db.ref(`${APP_KEY_NAME}/${currentSpaceKey}`).push().key;
 
   const payload = {};
-  // RED-06：空值不可覆蓋既有資料 -> 僅寫入有值欄位
   if (countryCode) payload.countryCode = countryCode;
   if (countryName) payload.countryName = countryName;
   if (cityName) payload.cityName = cityName;
-  if (visitor) { payload.visitor = visitor; localStorage.setItem('travel_lastVisitor', visitor); }
+  if (visitors.length > 0) payload.visitors = visitors;
+  if (pinColor) payload.pinColor = pinColor;
   if (visitType) payload.visitType = visitType;
   if (cityLat) payload.cityLat = cityLat;
   if (cityLon) payload.cityLon = cityLon;
@@ -751,7 +935,8 @@ function renderList() {
   listEl.innerHTML = ids.map(id => {
     const d = countriesData[id];
     const name = d.cityName ? `${d.cityName}（${d.countryName || d.countryCode}）` : (d.countryName || d.countryCode || '（未命名）');
-    const meta = [d.countryCode, d.visitYear ? `${d.visitYear} 年` : null, d.visitor ? `👤${d.visitor}` : null, d.visitType || null].filter(Boolean).join(' ・ ');
+    const visitorList = Array.isArray(d.visitors) ? d.visitors : (d.visitor ? [d.visitor] : []);
+    const meta = [d.countryCode, d.visitYear ? `${d.visitYear} 年` : null, visitorList.length ? `👤${visitorList.join('、')}` : null, d.visitType || null].filter(Boolean).join(' ・ ');
     const note = d.visitNote ? `<div class="note">${escapeHtml(d.visitNote)}</div>` : '';
     return `
       <div class="country-item">
@@ -792,15 +977,6 @@ const CONTINENT_MAP = {
   Africa: ["EG","LY","TN","DZ","MA","SD","SS","ET","ER","DJ","SO","KE","UG","TZ","RW","BI","CD","CG","GA","CM","CF","TD","NE","NG","BJ","TG","GH","CI","LR","SL","GN","GW","SN","GM","ML","BF","MR","ZA","NA","BW","ZW","ZM","MW","MZ","AO","SZ","LS","MG","MU","SC","KM","CV"]
 };
 /* 造訪者姓名 → 固定色碼（簡易雜湊，非外部API） */
-const VISITOR_PALETTE = ["#e8483b","#3b82c4","#2e9e6b","#d4a72c","#9b59b6","#e0673e","#1abc9c","#c0392b"];
-function getVisitorColor(name) {
-  if (!name) return "#555";
-  const found = Object.values(visitorsData).find(v => v.name === name);
-  if (found && found.color) return found.color;
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return VISITOR_PALETTE[Math.abs(hash) % VISITOR_PALETTE.length];
-}
 
 function pinIcon(color) {
   return L.divIcon({
@@ -865,7 +1041,8 @@ function renderWorldMap() {
       [lon, lat] = COUNTRY_COORDS[d.countryCode];
       label = d.countryName || d.countryCode;
     }
-    return { lat, lon, name: label, color: getVisitorColor(d.visitor), visitor: d.visitor || '' };
+    const visitorArr = Array.isArray(d.visitors) ? d.visitors : (d.visitor ? [d.visitor] : []);
+    return { lat, lon, name: label, color: d.pinColor || '#e8483b', visitor: visitorArr.join('、') };
   });
 
   if (!leafletMap) {
